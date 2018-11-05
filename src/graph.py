@@ -5,7 +5,7 @@ class Graph(object):
     """docstring for Graph"""
 
     def run(self):
-        print('start')
+        return "start"
 
 
 class Mapper(object):

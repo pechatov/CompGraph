@@ -1,5 +1,10 @@
 from graph import Graph
 
-if __name__ == "__main__":
+
+def main():
     g = Graph()
-    g.run()
+    print(g.run())
+
+
+if __name__ == "__main__":
+    main()
