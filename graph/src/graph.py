@@ -30,7 +30,9 @@ class Folder(object):
 
 
 class Reducer(object):
-    """docstring for Reducer"""
+    """docstring for Reducer
+    use groupby from itertools
+    """
     @abstractclassmethod
     def __call(self, records):
         pass
