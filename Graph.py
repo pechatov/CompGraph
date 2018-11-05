@@ -1,6 +1,13 @@
 from abc import abstractclassmethod
 
 
+class Graph(object):
+    """docstring for Graph"""
+
+    def run(self):
+        print('start')
+
+
 class Mapper(object):
     """base class for mapping"""
 
@@ -32,4 +39,5 @@ class Reducer(object):
 class Aggregator(object):
     """docstring for Aggregator"""
     @abstractclassmethod
-    def __call__(self, )
+    def __call__(self):
+        pass
