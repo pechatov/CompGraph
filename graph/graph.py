@@ -40,25 +40,17 @@ class Graph(object):
         #             self._queue.pop(j)
         #             j -= 1
 
-    def run(self, **kwargs):
+    def _insert_inputs(self, **kwargs):
         for node in self._queue:
             if isinstance(node, Input):
                 for k in kwargs:
                     if node.input == k:
                         node.input = kwargs[k]
 
-        print('before:')
-        for node in self._queue:
-            print('node = {}, node._input_counter = {}'.format(node, node._input_counter))
-            node.run()
+    def run(self, **kwargs):
+        self._insert_inputs(kwargs)
 
         self._delete_same_nodes()
-        print('after:')
-        for node in self._queue:
-            print('node = {}, node._input_counter = {}'.format(node, node._input_counter))
-            node.run()
-            # print(node.__dict__)
-            # print('*' * 50)
         # return self._queue[-1].result
 
     def map(self, mapper: Mapper):
