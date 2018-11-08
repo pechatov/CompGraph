@@ -17,6 +17,8 @@ class Operations(object):
         self.result = []
 
     def __eq__(self, other):
+        if type(self) != type(other):
+            return False
         for k in self.__dict__:
             if k != '_input_counter' and getattr(self, k) != getattr(other, k):
                 return False
@@ -29,9 +31,14 @@ class Operations(object):
             else:
                 self._process_run(self.input.result)
 
+    def _clear_memory(self):
         self.input._input_counter -= 1
-        # if self.input._input_counter == 0:
-        #     del self.input.result
+        if self.input._input_counter == 0:
+            del self.input.result
+        if type(self) == Joiner:
+            self.second_input._input_counter -= 1
+            if self.second_input._input_counter == 0:
+                del self.second_input.result
 
 
 class Input(Operations):
@@ -203,3 +210,4 @@ class Joiner(Operations):
             yield from self._process_right_join()
         elif self.method == 'outer':
             yield from self._process_outer_join()
+        super()._clear_memory()

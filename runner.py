@@ -69,7 +69,7 @@ def main():
     # print('*' * 100)
 
     names = [
-        {'name': 'Andrey', 'id': 1}, {'name': 'leonid', 'id': 2},
+        {'name': 'Andrey', 'id': 1}, {'name': 'Leonid', 'id': 2},
         {'name': 'Sergey', 'id': 1}, {'name': 'Georgy', 'id': 4}
     ]
 
@@ -79,24 +79,21 @@ def main():
         {'city_name': 'StPt', 'city_id': 2},
         {'city_name': 'Voronezh', 'city_id': 2}
     ]
-    q = Graph()
-    w = Graph()
-    # print(q._queue)
-    # print(w._queue)
-    # w.run(cities)
-    q.join(w, key=('id', 'city_id'), method='inner')
-    # print(q._queue)
-    q._queue[1].input = cities
-    # print(q._queue[-1].input, q._queue[-1].second_input)
-    q.run(names)
-    # for node in q._queue:
-    #     print(node.result)
 
-    # print(type(q))
-    # print(q._queue[-1].result)
-    for i in q._queue[-1].result:
-        print(i)
-    # print(w._queue[-1].result)
+    first = Graph()
+    first.input('names').map(minlen_filter_mapper)
+    second = Graph()
+    second.input(first)
+    third = Graph()
+    third.input(first)
+    fourth = Graph()
+    fourth.input(second).map(minlen_filter_mapper).join(third, key=('name', 'name'), method='left')
+    print("*" * 30)
+    for node in third._queue:
+        print('node = {}, node._input_counter = {}'.format(node, node._input_counter))
+    print("*" * 30)
+    # print(fourth._queue)
+    fourth.run(names=names)
 
 if __name__ == "__main__":
     main()

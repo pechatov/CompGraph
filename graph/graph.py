@@ -1,4 +1,5 @@
 from collections import Counter
+from copy import deepcopy
 from graph.operations import Mapper, Reducer, Folder, Sorter, Joiner, Input
 
 
@@ -10,8 +11,10 @@ class Graph(object):
         self._queue.append(Input())
 
     def input(self, input: 'Graph') -> None:
-
-        self._queue = input._queue
+        if isinstance(input, Graph):
+            self._queue = deepcopy(input._queue)
+        else:
+            self._queue[0].input = input
         return self
 
     def _delete_same_nodes(self):
@@ -24,6 +27,7 @@ class Graph(object):
                         if self._queue[k].input == self._queue[j]:
                             self._queue[k].input = self._queue[i]
                             self._queue[i]._input_counter += 1
+                            print('deleted')
         self._queue = [self._queue[i] for i in sorted(indeces_of_unique_nodes)]
 
         # for i in range(1, len(self._queue)):
@@ -36,13 +40,26 @@ class Graph(object):
         #             self._queue.pop(j)
         #             j -= 1
 
-    def run(self, input_table):
-        self._queue[0].input = input_table
-        # self._delete_same_nodes()
+    def run(self, **kwargs):
         for node in self._queue:
+            if isinstance(node, Input):
+                for k in kwargs:
+                    if node.input == k:
+                        node.input = kwargs[k]
+
+        print('before:')
+        for node in self._queue:
+            print('node = {}, node._input_counter = {}'.format(node, node._input_counter))
+            node.run()
+
+        self._delete_same_nodes()
+        print('after:')
+        for node in self._queue:
+            print('node = {}, node._input_counter = {}'.format(node, node._input_counter))
             node.run()
             # print(node.__dict__)
             # print('*' * 50)
+        # return self._queue[-1].result
 
     def map(self, mapper: Mapper):
         new_node = Mapper(mapper, self._queue[-1])
@@ -65,10 +82,12 @@ class Graph(object):
         return self
 
     def join(self, other_graph: 'Graph', key: str, method: str):
+        print('*' * 100)
         first_input = self._queue[-1]
         for node in other_graph._queue:
-            print(node)
+            print('node = {}, node._input_counter = {}'.format(node, node._input_counter))
             self._queue.append(node)
+        print('*' * 100)
         new_node = Joiner(key, method, first_input, self._queue[-1])
         self._queue.append(new_node)
         return self
