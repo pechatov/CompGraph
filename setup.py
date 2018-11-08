@@ -1,9 +1,11 @@
 from setuptools import setup
 
-packages = {
-    'graph': 'graph/',
-    'graph.src': 'graph/src'
-}
+# packages = {
+#     'graph': 'graph/',
+#     'graph.src': 'graph/src',
+#     'operations': 'graph/',
+#     'operations.src': 'graph/src'
+# }
 
 setup(
     name='graph',
@@ -11,6 +13,7 @@ setup(
     description='my graph',
     author='Mike Pechatov',
     author_email='pechatov@gmail.com',
-    packages=packages,
-    package_dir=packages
+    packages=[
+        'graph'
+    ]
 )
