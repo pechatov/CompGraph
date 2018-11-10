@@ -1,4 +1,5 @@
 from itertools import groupby
+from operator import itemgetter
 
 
 class Operations(object):
@@ -6,13 +7,15 @@ class Operations(object):
     doc for operations
     """
 
-    def __init__(self, input):
+    def __init__(self, input, **kwargs):
         self.input = input
-        self._input_counter = 0
+        self.kwargs = kwargs
+        self._maximum_uses_as_input = 0
+        self._current_uses_as_input = 0
         if isinstance(input, Operations):
-            input._input_counter += 1
+            input._maximum_uses_as_input += 1
         if type(self) == Joiner and isinstance(self.second_input, Operations):
-            self.second_input._input_counter += 1
+            self.second_input._maximum_uses_as_input += 1
 
         self.result = []
 
@@ -26,19 +29,25 @@ class Operations(object):
 
     def run(self):
         if self.result == []:
-            if type(self) in (Mapper, Reducer, Joiner):
-                self.result = self._process_run(self.input.result)
+            if type(self) in (Mapper, Reducer, Joiner) and self._maximum_uses_as_input <= 1:
+                self.result = self._process_run(self.input.result, **self.kwargs)
+            elif type(self) in (Mapper, Reducer, Joiner) and self._maximum_uses_as_input > 1:
+                self.result = list(self._process_run(self.input.result, **self.kwargs))
             else:
-                self._process_run(self.input.result)
+                self._process_run(self.input.result, **self.kwargs)
 
     def _clear_memory(self):
-        self.input._input_counter -= 1
-        if self.input._input_counter == 0:
-            del self.input.result
+        self.input._current_uses_as_input += 1
         if type(self) == Joiner:
-            self.second_input._input_counter -= 1
-            if self.second_input._input_counter == 0:
-                del self.second_input.result
+            self.second_input._current_uses_as_input += 1
+
+        if type(self.input.result) == list and self.input._maximum_uses_as_input == self.input._current_uses_as_input:
+            print('Clearing: {}'.format(self.input))
+            self.input.result = []
+        if type(self) == Joiner and type(self.second_input.result) == list:
+            if self.second_input._maximum_uses_as_input == self.second_input._current_uses_as_input:
+                print('Clearing: {}'.format(self.second_input))
+                self.second_input.result = []
 
 
 class Input(Operations):
@@ -56,15 +65,15 @@ class Input(Operations):
 class Mapper(Operations):
     """base class for mapping"""
 
-    def __init__(self, mapper, input):
+    def __init__(self, mapper, input, **kwargs):
         self.mapper = mapper
-        super().__init__(input)
+        super().__init__(input, **kwargs)
 
-    def _process_run(self, input):
+    def _process_run(self, input, **kwargs):
         for row in input:
-            for x in self.mapper(row):
-                # self.result.append(x)
+            for x in self.mapper(row, **kwargs):
                 yield x
+        super()._clear_memory()
 
 
 class Sorter(Operations):
@@ -76,16 +85,19 @@ class Sorter(Operations):
         self.key = key
         super().__init__(input)
 
-    def _slice_by_key(self):
-        if type(self.input) == tuple:
-            return lambda x: tuple(x[k] for k in self.key)
-        return lambda x: x[self.key]
+    # def _slice_by_key(self):
+    #     if type(self.input) == tuple:
+    #         return lambda x: tuple(x[k] for k in self.key)
+    #     return lambda x: x[self.key]
 
     def _process_run(self, input):
+        if type(self.key) == str:
+            self.key = [self.key]
         if type(input) != list:
-            self.result = sorted(list(input), key=self._slice_by_key())
+            self.result = sorted(list(input), key=itemgetter(*self.key))
         else:
-            self.result = sorted(input, key=self._slice_by_key())
+            self.result = sorted(input, key=itemgetter(*self.key))
+        super()._clear_memory()
 
 
 class Folder(Operations):
@@ -98,11 +110,9 @@ class Folder(Operations):
 
     def _process_run(self, input):
         for row in input:
-            if self.state is None:
-                self.state = row
-            else:
-                self.state = self.folder(self.state, row)
-        self.result = self.state
+            self.state = self.folder(self.state, row)
+        self.result = [self.state]
+        super()._clear_memory()
 
 
 class Reducer(Operations):
@@ -111,19 +121,22 @@ class Reducer(Operations):
     use groupby from itertools
     """
 
-    def __init__(self, reducer, key, input):
+    def __init__(self, reducer, key, input, **kwargs):
         self.reducer = reducer
         self.key = key
-        super().__init__(input)
+        super().__init__(input, **kwargs)
 
     def _slice_by_key(self):
-        if type(self.input) == tuple:
+        if type(self.key) == tuple:
             return lambda x: tuple(x[k] for k in self.key)
         return lambda x: x[self.key]
 
-    def _process_run(self, input):
-        for group in groupby(input, self._slice_by_key()):
-            yield from self.reducer(group[1])
+    def _process_run(self, input, **kwargs):
+        if type(self.key) == str:
+            self.key = [self.key]
+        for group in groupby(input, itemgetter(*self.key)):
+            yield from self.reducer(group[1], **kwargs)
+        super()._clear_memory()
 
 
 class Joiner(Operations):
@@ -147,7 +160,9 @@ class Joiner(Operations):
         for row_1 in self.input.result:
             flag = True
             for row_2 in self.second_input.result:
+                # print(row_1[self.key[0]], row_2[self.key[1]])
                 if row_1[self.key[0]] == row_2[self.key[1]]:
+                    flag = False
                     if reversed:
                         new_row = dict(row_2)
                         new_row.update(row_1)
@@ -155,7 +170,6 @@ class Joiner(Operations):
                         new_row = dict(row_1)
                         new_row.update(row_2)
                     yield new_row
-                    flag = False
             if flag:
                 if reversed:
                     new_row = {k: None for k in row_2}
@@ -201,7 +215,15 @@ class Joiner(Operations):
                     new_row.update(row_2)
                     yield new_row
 
+    def _process_cross_join(self):
+        for row_1 in self.input.result:
+            for row_2 in self.second_input.result:
+                new_row = dict(row_1)
+                new_row.update(row_2)
+                yield new_row
+
     def _process_run(self, input):
+        self.second_input.result = list(self.second_input.result)
         if self.method == 'inner':
             yield from self._process_inner_join()
         elif self.method == 'left':
@@ -210,4 +232,6 @@ class Joiner(Operations):
             yield from self._process_right_join()
         elif self.method == 'outer':
             yield from self._process_outer_join()
+        elif self.method == 'cross':
+            yield from self._process_cross_join()
         super()._clear_memory()
