@@ -1,5 +1,6 @@
 from copy import deepcopy
 from graph.operations import Mapper, Reducer, Folder, Sorter, Joiner, Input
+import json
 
 
 class Graph(object):
@@ -33,7 +34,10 @@ class Graph(object):
             if isinstance(node, Input):
                 for k in kwargs:
                     if node.input_id == k:
-                        node.input = kwargs[k]
+                        if self._parser == None:
+                            node.input = kwargs[k]
+                        else:
+                            node.input = self._parser(kwargs[k])
 
     def print_result(self):
         for row in self.result:
@@ -44,22 +48,25 @@ class Graph(object):
             node._current_uses_as_input = 0
             node.result = []
 
-    def run(self, **kwargs):
+    def run(self, parser=None, output=None, **kwargs):
         self.result = []
+        self._parser = parser
         self._clear_input_counter()
         self._delete_same_nodes()
         self._insert_inputs(**kwargs)
         for node in self._queue:
-            if kwargs['verbose'] == True:
-                print('*' * 100)
-                print('***************** Runnint:{} *****************'.format(node))
+            print('Running: {}'.format(node))
             node.run()
-            if kwargs['verbose'] == True:
-                print('*' * 100)
-                self.print_nodes()
+            # print('*' * 100)
+            # self.print_nodes()
 
-        self.result = self._queue[-1].result
-        return list(self.result)
+        if output is None:
+            self.result = self._queue[-1].result
+            return list(self.result)
+        else:
+            with open(output, 'w') as file:
+                for row in self._queue[-1].result:
+                    file.write(json.dumps(row))
 
     def print_nodes(self, **kwargs):
         # self.result = []

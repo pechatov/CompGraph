@@ -42,11 +42,11 @@ class Operations(object):
             self.second_input._current_uses_as_input += 1
 
         if type(self.input.result) == list and self.input._maximum_uses_as_input == self.input._current_uses_as_input:
-            print('Clearing: {}'.format(self.input))
+            # print('Clearing: {}'.format(self.input))
             self.input.result = []
         if type(self) == Joiner and type(self.second_input.result) == list:
             if self.second_input._maximum_uses_as_input == self.second_input._current_uses_as_input:
-                print('Clearing: {}'.format(self.second_input))
+                # print('Clearing: {}'.format(self.second_input))
                 self.second_input.result = []
 
 

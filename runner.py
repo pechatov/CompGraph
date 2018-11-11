@@ -5,12 +5,11 @@ from pytest import approx
 import string
 
 
-def minlen_filter_mapper(r):
-    """
-       filters out values with len(data) < 10
-    """
-    if len(r['name']) > 3:
-        yield r
+def _filter_punctuation(txt):
+    p = set(string.punctuation)
+    return "".join([c for c in txt if c not in p])
+
+# ************************_____build_word_count_graph_____************************
 
 
 def tokenizer_mapper(r, doc_column, text_column):
@@ -28,21 +27,24 @@ def tokenizer_mapper(r, doc_column, text_column):
         }
 
 
-def count_rows(state, row):
-    if state is None:
-        state = {'docs_count': 0}
-    state['docs_count'] += 1
-
-    return state
-
-
-def counting_reducer(records):
+def counting_reducer(records, text_column, count_column):
     cnt = 0
     for x in records:
         cnt += 1
-        word = x['text']
+        word = x[text_column]
 
-    yield {'count': cnt, 'text': word}
+    yield {count_column: cnt, text_column: word}
+# ********************************************************************************
+
+# ************************_____build_inverted_index_graph_____********************
+
+
+def count_rows(state, row):
+    if state is None:
+        state = {'count': 0}
+    state['count'] += 1
+
+    return state
 
 
 def term_frequency_reducer(records, doc_column, text_column):
@@ -71,19 +73,6 @@ def unique(records, doc_column, text_column):
         break
 
 
-def _filter_punctuation(txt):
-    p = set(string.punctuation)
-    return "".join([c for c in txt if c not in p])
-
-
-def build_word_count_graph(input):
-    my_graph = Graph()
-    my_graph.input(input).map(tokenizer_mapper).sort(key='text').reduce(
-        counting_reducer, key='text').sort(key='count')
-
-    return my_graph
-
-
 def invert_index(records, doc_column, text_column):
     result = []
     for row in records:
@@ -100,12 +89,59 @@ def calc_idf(records, doc_column, text_column):
         elements.add(r[doc_column])
         if word == 0:
             word = r[text_column]
-            counter = r['docs_count']
+            counter = r['count']
 
     yield {
         text_column: word,
         'idf': log(counter / len(elements))
     }
+
+# ********************************************************************************
+
+
+def tfr_for_all(records, text_column):
+    '''
+        calculates term frequency for every word in doc_id
+    '''
+    count = 0
+    for row in records:
+        count += 1
+
+    yield {
+        text_column: row[text_column],
+        'tf_for_all': count / row['count']
+    }
+
+
+def pmi_counter(records, doc_column, text_column):
+    result = []
+    for row in records:
+        result.append({text_column: row[text_column], doc_column: row[
+                      doc_column], 'pmi': log(row['tf'] / row['tf_for_all'])})
+    for x in sorted(result, key=lambda x: x['pmi'], reverse=True)[:10]:
+        yield x
+
+
+def drop_less_then_two(records, doc_column, text_column):
+    word_count = Counter()
+
+    for r in records:
+        word_count[r[text_column]] += 1
+
+    for w, count in word_count.items():
+        if count >= 2:
+            for i in range(count):
+                yield {
+                    doc_column: r[doc_column],
+                    text_column: w
+                }
+
+
+def my_parser(f):
+    result = []
+    for row in f:
+        result.append(eval(row.strip()))
+    return result
 
 
 def build_inverted_index_graph(input_stream, doc_column='doc_id', text_column='text'):
@@ -139,61 +175,82 @@ def main():
         {'doc_id': 3, 'text': 'little little little'},
         {'doc_id': 4, 'text': 'little? hello little world'},
         {'doc_id': 5, 'text': 'HELLO HELLO! WORLD...'},
-        {'doc_id': 6, 'text': 'world? world... world!!! WORLD!!! HELLO!!!'}
+        {'doc_id': 6, 'text': 'world? world... world!!! WORLD!!! HELLO!!! HELLO!!!!!!!'}
+    ]
+
+    rows1 = [
+        {'doc_id': 3, 'text': 'little little little'},
+        {'doc_id': 4, 'text': 'little? little'},
+        {'doc_id': 5, 'text': 'HELLO HELLO!'},
+        {'doc_id': 6, 'text': 'world? world... world!!! WORLD!!! HELLO!!! HELLO!!!!!!!'}
     ]
     doc_column = 'doc_id'
     text_column = 'text'
-    etalon = [
-        {"text": "hello", "doc_id": 5, "tf_idf": approx(0.2703, 0.001)},
-        {"text": "hello", "doc_id": 1, "tf_idf": approx(0.1351, 0.001)},
-        {"text": "hello", "doc_id": 4, "tf_idf": approx(0.1013, 0.001)},
-        {"text": "little", "doc_id": 2, "tf_idf": approx(0.4054, 0.001)},
-        {"text": "little", "doc_id": 3, "tf_idf": approx(0.4054, 0.001)},
-        {"text": "little", "doc_id": 4, "tf_idf": approx(0.2027, 0.001)},
-        {"text": "world", "doc_id": 6, "tf_idf": approx(0.3243, 0.001)},
-        {"text": "world", "doc_id": 1, "tf_idf": approx(0.1351, 0.001)},
-        {"text": "world", "doc_id": 5, "tf_idf": approx(0.1351, 0.001)}
-    ]
+    input_stream = 'rows'
 
+    etalon = [
+        {"doc_id": 3, "text": "little", "pmi": approx(0.9555, 0.001)},
+        {"doc_id": 4, "text": "little", "pmi": approx(0.9555, 0.001)},
+        {"doc_id": 5, "text": "hello", "pmi": approx(1.1786, 0.001)},
+        {"doc_id": 6, "text": "world", "pmi": approx(0.7731, 0.001)},
+        {"doc_id": 6, "text": "hello", "pmi": approx(0.0800, 0.001)},
+    ]
     # g = build_inverted_index_graph('texts')
     # result = g.run(texts=rows)
+    # split_words = Graph()
+    # split_words.input('rows').map(tokenizer_mapper, doc_column=doc_column, text_column=text_column)
+
+    # count_docs = Graph()
+    # count_docs.input('rows').fold(folder=count_rows)
+
+    # count_idf = Graph()
+    # count_idf.input(split_words).sort(key=(doc_column, text_column))\
+    #     .reduce(reducer=unique, key=(doc_column, text_column), doc_column=doc_column, text_column=text_column)\
+    #     .join(count_docs, method='cross')\
+    #     .sort(key=text_column)\
+    #     .reduce(reducer=calc_idf, key=text_column, doc_column=doc_column, text_column=text_column)
+
+    # calc_index = Graph()
+    # calc_index.input(split_words).sort(key=doc_column)\
+    #     .reduce(reducer=term_frequency_reducer, key=doc_column, doc_column=doc_column, text_column=text_column)\
+    #     .join(count_idf, key=(text_column, text_column), method='left')\
+    #     .sort(key=text_column)\
+    #     .reduce(reducer=invert_index, key=text_column, doc_column=doc_column, text_column=text_column)
+
     split_words = Graph()
-    split_words.input('rows').map(tokenizer_mapper, doc_column=doc_column, text_column=text_column)
+    split_words.input(input_stream).map(tokenizer_mapper, doc_column=doc_column, text_column=text_column)\
+        .sort(key=doc_column)\
+        .reduce(reducer=drop_less_then_two, key=doc_column, doc_column=doc_column, text_column=text_column)
 
-    count_docs = Graph()
-    count_docs.input('rows').fold(folder=count_rows)
-
-    count_idf = Graph()
-    count_idf.input(split_words).sort(key=(doc_column, text_column))\
-        .reduce(reducer=unique, key=(doc_column, text_column), doc_column=doc_column, text_column=text_column)\
-        .join(count_docs, method='cross')\
-        .sort(key=text_column)\
-        .reduce(reducer=calc_idf, key=text_column, doc_column=doc_column, text_column=text_column)
-
-    calc_index = Graph()
-    calc_index.input(split_words).sort(key=doc_column)\
-        .reduce(reducer=term_frequency_reducer, key=doc_column, doc_column=doc_column, text_column=text_column)\
-        .join(count_idf, key=(text_column, text_column), method='left')\
-        .sort(key=text_column)\
-        .reduce(reducer=invert_index, key=text_column, doc_column=doc_column, text_column=text_column)
-
-    result = calc_index.run(rows=rows, verbose=False)
-    assert result == etalon
+    # result = split_words.run(rows=rows)
     # print(result)
-    # for i in range(len(result)):
-    #     print('{} --- {}'.format(result[i], etalon[i]))
-    # for x in result:
-    #     print(x)
-    # calc_index.print_nodes()
-    # for x in result:
-    #     for j in x:
-    #         print(j)
-    # for x in result:
-    #     print(x)
-    # result = calc_index.run(rows=rows)
-    # calc_index.print_nodes(rows=rows)
+
+    count_tf = Graph()
+    count_tf.input(split_words).sort(key=doc_column)\
+        .reduce(reducer=term_frequency_reducer, key=doc_column, doc_column=doc_column, text_column=text_column)
+
+    # result = count_tf.run(rows=rows)
     # print(result)
-    # print(etalon)
+
+    count_words = Graph()
+    count_words.input(split_words).fold(folder=count_rows)
+
+    count_tf_for_all = Graph()
+    count_tf_for_all.input(split_words)\
+        .join(count_words, method='cross')\
+        .sort(key=text_column)\
+        .reduce(reducer=tfr_for_all, key=text_column, text_column=text_column)
+
+    # result = count_tf_for_all.run(rows=rows)
+    # print(result)
+
+    count_pmi = Graph()
+    count_pmi.input(count_tf).join(count_tf_for_all, key=(text_column, text_column), method='left')\
+        .sort(key=doc_column)\
+        .reduce(reducer=pmi_counter, key=doc_column, doc_column=doc_column, text_column=text_column)
+
+    count_pmi.run(rows=rows, output='out.txt')
+    # print(result == etalon)
 
 
 if __name__ == "__main__":
