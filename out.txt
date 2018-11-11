@@ -1,0 +1,1 @@
+{"text": "little", "doc_id": 3, "pmi": 0.9555114450274362}{"text": "little", "doc_id": 4, "pmi": 0.9555114450274362}{"text": "hello", "doc_id": 5, "pmi": 1.1786549963416462}{"text": "world", "doc_id": 6, "pmi": 0.7731898882334817}{"text": "hello", "doc_id": 6, "pmi": 0.08004270767353636}
